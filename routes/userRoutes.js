@@ -6,13 +6,14 @@ import {
   updateUserById,
   deleteUserById,
 } from "../controllers/userController.js";
+import validateUser from "../middlewares/validateUser.js";
 
 const router = express.Router();
 
-router.post("/", addUser);
+router.post("/", validateUser, addUser);
 router.get("/", getUsers);
 router.get("/:id", getUserById);
-router.put("/:id", updateUserById);
+router.put("/:id", validateUser, updateUserById);
 router.delete("/:id", deleteUserById);
 
 export default router;
