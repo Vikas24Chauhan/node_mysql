@@ -1,71 +1,82 @@
-import connection from "../config/db.js";
+import pool from "../config/db.js";
 
-export const addUser = (req, res) => {
-  const { name, email, age } = req.body;
+export const addUser = async (req, res) => {
+  try {
+    const { name, email, age } = req.body;
 
-  const sql = "INSERT INTO users(name,email,age) VALUES(?,?,?)";
+    const sql = `
+            INSERT INTO users
+            (name,email,age)
+            VALUES(?,?,?)
+        `;
 
-  connection.query(sql, [name, email, age], (err, result) => {
-    if (err) {
-      return res.status(500).json(err);
-    }
+    const [result] = await pool.query(sql, [name, email, age]);
 
     res.status(201).json({
       message: "User Added",
       id: result.insertId,
     });
-  });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };
 
-export const getUsers = (req, res) => {
-  connection.query("SELECT * FROM users", (err, result) => {
-    if (err) {
-      return res.status(500).json(err);
-    }
+export const getUsers = async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM users");
 
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+export const getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [result] = await pool.query("SELECT * FROM users WHERE id = ?", [id]);
     res.json(result);
-  });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };
 
-export const getUserById = (req, res) => {
-  const { id } = req.params;
+export const updateUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, age } = req.body;
 
-  connection.query("SELECT * FROM users WHERE id = ?", [id], (err, result) => {
-    if (err) {
-      return res.status(500).json(err);
-    }
+    const sql = "UPDATE users SET name=?, email=?, age=? WHERE id=?";
 
-    res.json(result);
-  });
-};
-
-export const updateUserById = (req, res) => {
-  const { id } = req.params;
-  const { name, email, age } = req.body;
-
-  const sql = "UPDATE users SET name=?, email=?, age=? WHERE id=?";
-
-  connection.query(sql, [name, email, age, id], (err, result) => {
-    if (err) {
-      return res.status(500).json(err);
-    }
-
+    const [result] = await pool.query(sql, [name, email, age, id]);
     res.json({
       message: "User Updated Successfully",
     });
-  });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };
 
-export const deleteUserById = (req, res) => {
-  const { id } = req.params;
+export const deleteUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
 
-  connection.query("DELETE FROM users WHERE id=?", [id], (err, result) => {
-    if (err) {
-      return res.status(500).json(err);
-    }
-
+    const [result] = await pool.query("DELETE FROM users WHERE id=?", [id]);
     res.json({
       message: "User Deleted Successfully",
     });
-  });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };
