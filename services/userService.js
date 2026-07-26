@@ -25,9 +25,27 @@ export const createUser = async (name, email, age) => {
 };
 
 // Get All Users
-export const getAllUsers = async () => {
-  const [rows] = await pool.query("SELECT * FROM users");
-  return rows;
+export const getAllUsers = async (page, limit) => {
+  const offset = (page - 1) * limit;
+
+  const [[count]] = await pool.query("SELECT COUNT(*) AS total FROM users");
+
+  const [rows] = await pool.query(
+    `SELECT * FROM users
+     LIMIT ?
+     OFFSET ?`,
+    [limit, offset],
+  );
+
+  return {
+    users: rows,
+    pagination: {
+      totalUsers: count.total,
+      currentPage: page,
+      limit,
+      totalPages: Math.ceil(count.total / limit),
+    },
+  };
 };
 
 // Get User By ID
