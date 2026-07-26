@@ -196,3 +196,19 @@ export const deleteUserService = async (id) => {
 
   return;
 };
+
+export const saveOTP = async (email, otp) => {
+  const expiry = Date.now() + 5 * 60 * 1000;
+
+  const [result] = await pool.query(
+    `
+      UPDATE users
+      SET otp = ?,
+          otp_expiry = ?
+      WHERE email = ?
+    `,
+    [otp, expiry, email],
+  );
+
+  return result.affectedRows;
+};

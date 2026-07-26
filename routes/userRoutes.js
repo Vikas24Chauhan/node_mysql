@@ -5,13 +5,14 @@ import {
   getUserById,
   updateUserById,
   deleteUserById,
+  uploadProfile,
+  sendWelcomeMail,
+  forgotPassword,
 } from "../controllers/userController.js";
 import validateUser from "../middlewares/validateUser.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import authorizeRoles from "../middlewares/authorizeRoles.js";
 import upload from "../middlewares/uploadMiddleware.js";
-import { uploadProfile } from "../controllers/userController.js";
-import { sendWelcomeMail } from "../controllers/userController.js";
 
 const router = express.Router();
 
@@ -36,5 +37,7 @@ router.delete("/:id", authMiddleware, authorizeRoles("admin"), deleteUserById);
 router.post("/upload", upload.single("image"), uploadProfile);
 
 router.post("/send-email", sendWelcomeMail);
+
+router.post("/forgot-password", forgotPassword);
 
 export default router;

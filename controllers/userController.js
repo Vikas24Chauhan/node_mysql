@@ -1,13 +1,17 @@
 import ApiResponse from "../utils/ApiResponse.js";
+import ApiError from "../utils/ApiError.js";
 import {
   createUser,
   getAllUsers,
   getUserByIdService,
   updateUserService,
   deleteUserService,
+  saveOTP,
 } from "../services/userService.js";
 import { sendEmail } from "../services/emailService.js";
 import { welcomeTemplate } from "../templates/welcomeEmail.js";
+import { otpTemplate } from "../templates/otpTemplate.js";
+import { generateOTP } from "../utils/otpGenerator.js";
 
 // Add User
 export const addUser = async (req, res, next) => {
@@ -162,6 +166,26 @@ export const sendWelcomeMail = async (req, res, next) => {
 
     await sendEmail(email, "Welcome", welcomeTemplate("Vikas"));
     res.status(200).json(new ApiResponse(200, "Email sent successfully"));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    const otp = generateOTP();
+
+    const updated = await saveOTP(email, otp);
+
+    if (!updated) {
+      return next(new ApiError(404, "User not found"));
+    }
+
+    await sendEmail(email, "Password Reset OTP", otpTemplate(otp));
+
+    res.status(200).json(new ApiResponse(200, "OTP sent successfully"));
   } catch (error) {
     next(error);
   }
