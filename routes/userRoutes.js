@@ -11,6 +11,7 @@ import authMiddleware from "../middlewares/authMiddleware.js";
 import authorizeRoles from "../middlewares/authorizeRoles.js";
 import upload from "../middlewares/uploadMiddleware.js";
 import { uploadProfile } from "../controllers/userController.js";
+import { sendWelcomeMail } from "../controllers/userController.js";
 
 const router = express.Router();
 
@@ -33,5 +34,7 @@ router.put(
 router.delete("/:id", authMiddleware, authorizeRoles("admin"), deleteUserById);
 
 router.post("/upload", upload.single("image"), uploadProfile);
+
+router.post("/send-email", sendWelcomeMail);
 
 export default router;

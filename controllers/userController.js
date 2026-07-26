@@ -6,6 +6,8 @@ import {
   updateUserService,
   deleteUserService,
 } from "../services/userService.js";
+import { sendEmail } from "../services/emailService.js";
+import { welcomeTemplate } from "../templates/welcomeEmail.js";
 
 // Add User
 export const addUser = async (req, res, next) => {
@@ -149,6 +151,17 @@ export const uploadProfile = async (req, res, next) => {
         path: req.file.path,
       }),
     );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const sendWelcomeMail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    await sendEmail(email, "Welcome", welcomeTemplate("Vikas"));
+    res.status(200).json(new ApiResponse(200, "Email sent successfully"));
   } catch (error) {
     next(error);
   }
