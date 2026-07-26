@@ -8,6 +8,7 @@ import {
   uploadProfile,
   sendWelcomeMail,
   forgotPassword,
+  verifyOTP,
 } from "../controllers/userController.js";
 import validateUser from "../middlewares/validateUser.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
@@ -39,5 +40,7 @@ router.post("/upload", upload.single("image"), uploadProfile);
 router.post("/send-email", sendWelcomeMail);
 
 router.post("/forgot-password", forgotPassword);
+
+router.post("/verify-otp", verifyOTP);
 
 export default router;

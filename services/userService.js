@@ -212,3 +212,30 @@ export const saveOTP = async (email, otp) => {
 
   return result.affectedRows;
 };
+
+export const verifyOTPService = async (email, otp) => {
+  const [rows] = await pool.query(
+    `
+      SELECT otp, otp_expiry
+      FROM users
+      WHERE email = ?
+    `,
+    [email],
+  );
+
+  if (rows.length === 0) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const user = rows[0];
+
+  if (user.otp !== otp) {
+    throw new ApiError(400, "Invalid OTP");
+  }
+
+  if (Date.now() > user.otp_expiry) {
+    throw new ApiError(400, "OTP has expired");
+  }
+
+  return true;
+};

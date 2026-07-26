@@ -7,6 +7,7 @@ import {
   updateUserService,
   deleteUserService,
   saveOTP,
+  verifyOTPService,
 } from "../services/userService.js";
 import { sendEmail } from "../services/emailService.js";
 import { welcomeTemplate } from "../templates/welcomeEmail.js";
@@ -186,6 +187,18 @@ export const forgotPassword = async (req, res, next) => {
     await sendEmail(email, "Password Reset OTP", otpTemplate(otp));
 
     res.status(200).json(new ApiResponse(200, "OTP sent successfully"));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const verifyOTP = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+
+    await verifyOTPService(email, otp);
+
+    res.status(200).json(new ApiResponse(200, "OTP verified successfully"));
   } catch (error) {
     next(error);
   }
