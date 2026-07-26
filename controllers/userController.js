@@ -53,6 +53,27 @@ export const addUser = async (req, res, next) => {
 // };
 
 // ----------------------- Pagination + Search + Filter -----------------------------------
+// export const getUsers = async (req, res, next) => {
+//   try {
+//     const page = Math.max(1, Number(req.query.page) || 1);
+
+//     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
+
+//     const search = req.query.search || "";
+
+//     const age = req.query.age || null;
+
+//     const result = await getAllUsers(page, limit, search, age);
+
+//     res
+//       .status(200)
+//       .json(new ApiResponse(200, "Users fetched successfully", result));
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
+// ----------------------- Pagination + Search + Filter + Sorting -----------------------------------
 export const getUsers = async (req, res, next) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
@@ -63,7 +84,11 @@ export const getUsers = async (req, res, next) => {
 
     const age = req.query.age || null;
 
-    const result = await getAllUsers(page, limit, search, age);
+    // Sorting
+    const sortBy = req.query.sortBy || "id";
+    const order = req.query.order?.toUpperCase() || "ASC";
+
+    const result = await getAllUsers(page, limit, search, age, sortBy, order);
 
     res
       .status(200)
