@@ -9,6 +9,7 @@ import {
   sendWelcomeMail,
   forgotPassword,
   verifyOTP,
+  resetPassword,
 } from "../controllers/userController.js";
 import validateUser from "../middlewares/validateUser.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
@@ -42,5 +43,7 @@ router.post("/send-email", sendWelcomeMail);
 router.post("/forgot-password", forgotPassword);
 
 router.post("/verify-otp", verifyOTP);
+
+router.post("/reset-password", resetPassword);
 
 export default router;

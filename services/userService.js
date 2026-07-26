@@ -1,5 +1,6 @@
 import pool from "../config/db.js";
 import ApiError from "../utils/ApiError.js";
+import bcrypt from "bcrypt";
 
 // Create User
 export const createUser = async (name, email, age) => {
@@ -238,4 +239,34 @@ export const verifyOTPService = async (email, otp) => {
   }
 
   return true;
+};
+
+export const resetPasswordService = async (email, newPassword) => {
+  // Check if user exists
+  const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
+    email,
+  ]);
+
+  if (rows.length === 0) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // Hash password
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+  // Update password and clear OTP
+  await pool.query(
+    `
+    UPDATE users
+    SET password = ?,
+        otp = NULL,
+        otp_expiry = NULL
+    WHERE email = ?
+    `,
+    [hashedPassword, email],
+  );
+
+  return {
+    email,
+  };
 };
