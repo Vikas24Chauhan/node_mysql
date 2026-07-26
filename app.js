@@ -14,4 +14,6 @@ app.use("/auth", authRoutes);
 // Error Middleware
 app.use(errorHandler);
 
+app.use("/uploads", express.static("uploads"));
+
 export default app;

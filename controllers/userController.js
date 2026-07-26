@@ -136,3 +136,20 @@ export const deleteUserById = async (req, res, next) => {
     next(error);
   }
 };
+
+export const uploadProfile = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return next(new ApiError(400, "Please upload an image."));
+    }
+
+    res.status(200).json(
+      new ApiResponse(200, "Image uploaded successfully", {
+        filename: req.file.filename,
+        path: req.file.path,
+      }),
+    );
+  } catch (error) {
+    next(error);
+  }
+};

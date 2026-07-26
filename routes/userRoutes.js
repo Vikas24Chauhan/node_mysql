@@ -9,6 +9,8 @@ import {
 import validateUser from "../middlewares/validateUser.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import authorizeRoles from "../middlewares/authorizeRoles.js";
+import upload from "../middlewares/uploadMiddleware.js";
+import { uploadProfile } from "../controllers/userController.js";
 
 const router = express.Router();
 
@@ -29,5 +31,7 @@ router.put(
   updateUserById,
 );
 router.delete("/:id", authMiddleware, authorizeRoles("admin"), deleteUserById);
+
+router.post("/upload", upload.single("image"), uploadProfile);
 
 export default router;
