@@ -21,15 +21,49 @@ export const addUser = async (req, res, next) => {
 };
 
 // Get All Users
+// export const getUsers = async (req, res, next) => {
+//   try {
+//     const users = await getAllUsers();
+
+//     res
+//       .status(200)
+//       .json(new ApiResponse(200, "Users fetched successfully", users));
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
+// ------------------ Pagination ------------------------------------------------
+// export const getUsers = async (req, res, next) => {
+//   try {
+//     // Read query parameters
+//     const page = Math.max(1, Number(req.query.page) || 1);
+
+//     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
+
+//     // Pass to service
+//     const result = await getAllUsers(page, limit);
+
+//     res
+//       .status(200)
+//       .json(new ApiResponse(200, "Users fetched successfully", result));
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
+// ----------------------- Pagination + Search + Filter -----------------------------------
 export const getUsers = async (req, res, next) => {
   try {
-    // Read query parameters
     const page = Math.max(1, Number(req.query.page) || 1);
 
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
 
-    // Pass to service
-    const result = await getAllUsers(page, limit);
+    const search = req.query.search || "";
+
+    const age = req.query.age || null;
+
+    const result = await getAllUsers(page, limit, search, age);
 
     res
       .status(200)

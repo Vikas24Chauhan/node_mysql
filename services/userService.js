@@ -25,25 +25,82 @@ export const createUser = async (name, email, age) => {
 };
 
 // Get All Users
-export const getAllUsers = async (page, limit) => {
+// export const getAllUsers = async () => {
+//   const [rows] = await pool.query("SELECT * FROM users");
+//   return rows;
+// };
+
+// ------------------ Pagination ------------------------------------------------
+// export const getAllUsers = async (page, limit) => {
+//   const offset = (page - 1) * limit;
+
+//   const [[count]] = await pool.query("SELECT COUNT(*) AS total FROM users");
+
+//   const [rows] = await pool.query(
+//     `SELECT * FROM users
+//      LIMIT ?
+//      OFFSET ?`,
+//     [limit, offset],
+//   );
+
+//   return {
+//     users: rows,
+//     pagination: {
+//       totalUsers: count.total,
+//       currentPage: page,
+//       limit,
+//       totalPages: Math.ceil(count.total / limit),
+//     },
+//   };
+// };
+
+// ----------------------- Pagination + Search + Filter -----------------------------------
+export const getAllUsers = async (page, limit, search, age) => {
   const offset = (page - 1) * limit;
 
-  const [[count]] = await pool.query("SELECT COUNT(*) AS total FROM users");
+  let whereClause = "WHERE 1=1";
 
+  const values = [];
+
+  // Search by name or email
+  if (search) {
+    whereClause += " AND (name LIKE ? OR email LIKE ?)";
+    values.push(`%${search}%`, `%${search}%`);
+  }
+
+  // Filter by age
+  if (age) {
+    whereClause += " AND age = ?";
+    values.push(age);
+  }
+
+  // Count query
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM users
+     ${whereClause}`,
+    values,
+  );
+
+  // Fetch data
   const [rows] = await pool.query(
-    `SELECT * FROM users
-     LIMIT ?
-     OFFSET ?`,
-    [limit, offset],
+    `
+      SELECT *
+      FROM users
+      ${whereClause}
+      LIMIT ?
+      OFFSET ?
+    `,
+    [...values, limit, offset],
   );
 
   return {
     users: rows,
     pagination: {
-      totalUsers: count.total,
+      totalUsers: countRows[0].total,
       currentPage: page,
       limit,
-      totalPages: Math.ceil(count.total / limit),
+      totalPages: Math.ceil(countRows[0].total / limit),
     },
   };
 };
