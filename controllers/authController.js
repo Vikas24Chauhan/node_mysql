@@ -123,3 +123,43 @@ export const forgotPassword = async (req, res, next) => {
     next(error);
   }
 };
+
+export const verifyOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+
+    // Find user
+    const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
+      email,
+    ]);
+
+    if (rows.length === 0) {
+      const error = new Error("User not found");
+      error.statusCode = 404;
+      return next(error);
+    }
+
+    const user = rows[0];
+
+    // Check OTP
+    if (user.otp !== otp) {
+      const error = new Error("Invalid OTP");
+      error.statusCode = 400;
+      return next(error);
+    }
+
+    // Check Expiry
+    if (new Date() > new Date(user.otp_expiry)) {
+      const error = new Error("OTP has expired");
+      error.statusCode = 400;
+      return next(error);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "OTP verified successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
