@@ -163,3 +163,37 @@ export const verifyOtp = async (req, res, next) => {
     next(error);
   }
 };
+
+export const resetPassword = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
+      email,
+    ]);
+
+    if (rows.length === 0) {
+      const error = new Error("User not found");
+      error.statusCode = 404;
+      return next(error);
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await pool.query(
+      `UPDATE users
+       SET password = ?,
+           otp = NULL,
+           otp_expiry = NULL
+       WHERE email = ?`,
+      [hashedPassword, email],
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
