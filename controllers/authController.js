@@ -1,6 +1,8 @@
 import pool from "../config/db.js";
 import bcrypt from "bcrypt";
 import generateToken from "../utils/generateToken.js";
+import { sendEmail } from "../services/emailService.js";
+import { otpTemplate } from "../templates/otpTemplate.js";
 
 export const register = async (req, res, next) => {
   try {
@@ -75,6 +77,47 @@ export const login = async (req, res, next) => {
       message: "Login successful",
       token,
       user,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    // Check user exists
+    const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
+      email,
+    ]);
+
+    if (rows.length === 0) {
+      const error = new Error("User not found");
+      error.statusCode = 404;
+      return next(error);
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // OTP expires after 10 minutes
+    const expiry = new Date(Date.now() + 10 * 60 * 1000);
+
+    // Save OTP
+    await pool.query(
+      `UPDATE users
+       SET otp = ?, otp_expiry = ?
+       WHERE email = ?`,
+      [otp, expiry, email],
+    );
+
+    // Send Email
+    await sendEmail(email, "Password Reset OTP", otpTemplate(otp));
+
+    res.status(200).json({
+      success: true,
+      message: "OTP sent successfully",
     });
   } catch (error) {
     next(error);
