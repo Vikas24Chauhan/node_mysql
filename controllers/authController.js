@@ -4,17 +4,27 @@ import generateToken from "../utils/generateToken.js";
 import { sendEmail } from "../services/emailService.js";
 import { otpTemplate } from "../templates/otpTemplate.js";
 
+// ======================================================
+// Register
+// ======================================================
 export const register = async (req, res, next) => {
   try {
     const { name, email, age, password } = req.body;
 
+    // Check required fields
+    if (!name || !email || !password) {
+      const error = new Error("Name, email and password are required");
+      error.statusCode = 400;
+      return next(error);
+    }
+
     // Check if email already exists
-    const [existingUser] = await pool.query(
-      "SELECT * FROM users WHERE email = ?",
+    const existingUserResult = await pool.query(
+      "SELECT id FROM users WHERE email = $1",
       [email],
     );
 
-    if (existingUser.length > 0) {
+    if (existingUserResult.rows.length > 0) {
       const error = new Error("Email already exists");
       error.statusCode = 409;
       return next(error);
@@ -24,38 +34,48 @@ export const register = async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Save user
-    const [result] = await pool.query(
+    const result = await pool.query(
       `INSERT INTO users (name, email, age, password)
-       VALUES (?, ?, ?, ?)`,
-      [name, email, age, hashedPassword],
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [name, email, age || null, hashedPassword],
     );
 
     res.status(201).json({
       success: true,
       message: "User registered successfully",
-      userId: result.insertId,
+      userId: result.rows[0].id,
     });
   } catch (error) {
     next(error);
   }
 };
 
+// ======================================================
+// Login
+// ======================================================
 export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      const error = new Error("Email and password are required");
+      error.statusCode = 400;
+      return next(error);
+    }
+
     // Find user
-    const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
+    const result = await pool.query("SELECT * FROM users WHERE email = $1", [
       email,
     ]);
 
-    if (rows.length === 0) {
+    if (result.rows.length === 0) {
       const error = new Error("Invalid email or password");
       error.statusCode = 401;
       return next(error);
     }
 
-    const user = rows[0];
+    const user = result.rows[0];
 
     // Compare password
     const isMatch = await bcrypt.compare(password, user.password);
@@ -83,16 +103,26 @@ export const login = async (req, res, next) => {
   }
 };
 
+// ======================================================
+// Forgot Password
+// ======================================================
 export const forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
 
-    // Check user exists
-    const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
-      email,
-    ]);
+    if (!email) {
+      const error = new Error("Email is required");
+      error.statusCode = 400;
+      return next(error);
+    }
 
-    if (rows.length === 0) {
+    // Check user exists
+    const userResult = await pool.query(
+      "SELECT id FROM users WHERE email = $1",
+      [email],
+    );
+
+    if (userResult.rows.length === 0) {
       const error = new Error("User not found");
       error.statusCode = 404;
       return next(error);
@@ -107,8 +137,9 @@ export const forgotPassword = async (req, res, next) => {
     // Save OTP
     await pool.query(
       `UPDATE users
-       SET otp = ?, otp_expiry = ?
-       WHERE email = ?`,
+       SET otp = $1,
+           otp_expiry = $2
+       WHERE email = $3`,
       [otp, expiry, email],
     );
 
@@ -124,22 +155,34 @@ export const forgotPassword = async (req, res, next) => {
   }
 };
 
+// ======================================================
+// Verify OTP
+// ======================================================
 export const verifyOtp = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
 
-    // Find user
-    const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
-      email,
-    ]);
+    if (!email || !otp) {
+      const error = new Error("Email and OTP are required");
+      error.statusCode = 400;
+      return next(error);
+    }
 
-    if (rows.length === 0) {
+    // Find user
+    const result = await pool.query(
+      `SELECT otp, otp_expiry
+       FROM users
+       WHERE email = $1`,
+      [email],
+    );
+
+    if (result.rows.length === 0) {
       const error = new Error("User not found");
       error.statusCode = 404;
       return next(error);
     }
 
-    const user = rows[0];
+    const user = result.rows[0];
 
     // Check OTP
     if (user.otp !== otp) {
@@ -148,8 +191,8 @@ export const verifyOtp = async (req, res, next) => {
       return next(error);
     }
 
-    // Check Expiry
-    if (new Date() > new Date(user.otp_expiry)) {
+    // Check expiry
+    if (!user.otp_expiry || new Date() > new Date(user.otp_expiry)) {
       const error = new Error("OTP has expired");
       error.statusCode = 400;
       return next(error);
@@ -164,28 +207,41 @@ export const verifyOtp = async (req, res, next) => {
   }
 };
 
+// ======================================================
+// Reset Password
+// ======================================================
 export const resetPassword = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
-      email,
-    ]);
+    if (!email || !password) {
+      const error = new Error("Email and password are required");
+      error.statusCode = 400;
+      return next(error);
+    }
 
-    if (rows.length === 0) {
+    // Check user exists
+    const userResult = await pool.query(
+      "SELECT id FROM users WHERE email = $1",
+      [email],
+    );
+
+    if (userResult.rows.length === 0) {
       const error = new Error("User not found");
       error.statusCode = 404;
       return next(error);
     }
 
+    // Hash new password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Update password and clear OTP
     await pool.query(
       `UPDATE users
-       SET password = ?,
+       SET password = $1,
            otp = NULL,
            otp_expiry = NULL
-       WHERE email = ?`,
+       WHERE email = $2`,
       [hashedPassword, email],
     );
 

@@ -1,5 +1,6 @@
 import ApiResponse from "../utils/ApiResponse.js";
 import ApiError from "../utils/ApiError.js";
+
 import {
   createUser,
   getAllUsers,
@@ -10,17 +11,24 @@ import {
   verifyOTPService,
   resetPasswordService,
 } from "../services/userService.js";
+
 import { sendEmail } from "../services/emailService.js";
 import { welcomeTemplate } from "../templates/welcomeEmail.js";
 import { otpTemplate } from "../templates/otpTemplate.js";
 import { generateOTP } from "../utils/otpGenerator.js";
 
+// ======================================================
 // Add User
+// ======================================================
 export const addUser = async (req, res, next) => {
   try {
     const { name, email, age } = req.body;
 
-    const user = await createUser(name, email, age);
+    if (!name || !email) {
+      throw new ApiError(400, "Name and email are required");
+    }
+
+    const user = await createUser(name, email, age ? Number(age) : null);
 
     res.status(201).json(new ApiResponse(201, "User Added Successfully", user));
   } catch (error) {
@@ -28,72 +36,26 @@ export const addUser = async (req, res, next) => {
   }
 };
 
+// ======================================================
 // Get All Users
-// export const getUsers = async (req, res, next) => {
-//   try {
-//     const users = await getAllUsers();
-
-//     res
-//       .status(200)
-//       .json(new ApiResponse(200, "Users fetched successfully", users));
-//   } catch (error) {
-//     next(error);
-//   }
-// };
-
-// ------------------ Pagination ------------------------------------------------
-// export const getUsers = async (req, res, next) => {
-//   try {
-//     // Read query parameters
-//     const page = Math.max(1, Number(req.query.page) || 1);
-
-//     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
-
-//     // Pass to service
-//     const result = await getAllUsers(page, limit);
-
-//     res
-//       .status(200)
-//       .json(new ApiResponse(200, "Users fetched successfully", result));
-//   } catch (error) {
-//     next(error);
-//   }
-// };
-
-// ----------------------- Pagination + Search + Filter -----------------------------------
-// export const getUsers = async (req, res, next) => {
-//   try {
-//     const page = Math.max(1, Number(req.query.page) || 1);
-
-//     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
-
-//     const search = req.query.search || "";
-
-//     const age = req.query.age || null;
-
-//     const result = await getAllUsers(page, limit, search, age);
-
-//     res
-//       .status(200)
-//       .json(new ApiResponse(200, "Users fetched successfully", result));
-//   } catch (error) {
-//     next(error);
-//   }
-// };
-
-// ----------------------- Pagination + Search + Filter + Sorting -----------------------------------
+// Pagination + Search + Filter + Sorting
+// ======================================================
 export const getUsers = async (req, res, next) => {
   try {
+    // Pagination
     const page = Math.max(1, Number(req.query.page) || 1);
 
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
 
-    const search = req.query.search || "";
+    // Search
+    const search = req.query.search?.trim() || "";
 
-    const age = req.query.age || null;
+    // Age filter
+    const age = req.query.age ? Number(req.query.age) : null;
 
     // Sorting
     const sortBy = req.query.sortBy || "id";
+
     const order = req.query.order?.toUpperCase() || "ASC";
 
     const result = await getAllUsers(page, limit, search, age, sortBy, order);
@@ -106,10 +68,14 @@ export const getUsers = async (req, res, next) => {
   }
 };
 
+// ======================================================
 // Get User By ID
+// ======================================================
 export const getUserById = async (req, res, next) => {
   try {
-    const user = await getUserByIdService(req.params.id);
+    const { id } = req.params;
+
+    const user = await getUserByIdService(id);
 
     res
       .status(200)
@@ -119,12 +85,25 @@ export const getUserById = async (req, res, next) => {
   }
 };
 
+// ======================================================
 // Update User
+// ======================================================
 export const updateUserById = async (req, res, next) => {
   try {
     const { name, email, age } = req.body;
 
-    const user = await updateUserService(req.params.id, name, email, age);
+    if (!name || !email) {
+      throw new ApiError(400, "Name and email are required");
+    }
+
+    const { id } = req.params;
+
+    const user = await updateUserService(
+      id,
+      name,
+      email,
+      age ? Number(age) : null,
+    );
 
     res
       .status(200)
@@ -134,10 +113,14 @@ export const updateUserById = async (req, res, next) => {
   }
 };
 
+// ======================================================
 // Delete User
+// ======================================================
 export const deleteUserById = async (req, res, next) => {
   try {
-    await deleteUserService(req.params.id);
+    const { id } = req.params;
+
+    await deleteUserService(id);
 
     res.status(200).json(new ApiResponse(200, "User Deleted Successfully"));
   } catch (error) {
@@ -145,6 +128,9 @@ export const deleteUserById = async (req, res, next) => {
   }
 };
 
+// ======================================================
+// Upload Profile Image
+// ======================================================
 export const uploadProfile = async (req, res, next) => {
   try {
     if (!req.file) {
@@ -162,29 +148,47 @@ export const uploadProfile = async (req, res, next) => {
   }
 };
 
+// ======================================================
+// Send Welcome Email
+// ======================================================
 export const sendWelcomeMail = async (req, res, next) => {
   try {
     const { email } = req.body;
 
+    if (!email) {
+      throw new ApiError(400, "Email is required");
+    }
+
     await sendEmail(email, "Welcome", welcomeTemplate("Vikas"));
+
     res.status(200).json(new ApiResponse(200, "Email sent successfully"));
   } catch (error) {
     next(error);
   }
 };
 
+// ======================================================
+// Forgot Password
+// ======================================================
 export const forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
 
+    if (!email) {
+      throw new ApiError(400, "Email is required");
+    }
+
+    // Generate OTP
     const otp = generateOTP();
 
+    // Save OTP in PostgreSQL
     const updated = await saveOTP(email, otp);
 
     if (!updated) {
       return next(new ApiError(404, "User not found"));
     }
 
+    // Send OTP
     await sendEmail(email, "Password Reset OTP", otpTemplate(otp));
 
     res.status(200).json(new ApiResponse(200, "OTP sent successfully"));
@@ -193,9 +197,16 @@ export const forgotPassword = async (req, res, next) => {
   }
 };
 
+// ======================================================
+// Verify OTP
+// ======================================================
 export const verifyOTP = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      throw new ApiError(400, "Email and OTP are required");
+    }
 
     await verifyOTPService(email, otp);
 
@@ -205,9 +216,16 @@ export const verifyOTP = async (req, res, next) => {
   }
 };
 
+// ======================================================
+// Reset Password
+// ======================================================
 export const resetPassword = async (req, res, next) => {
   try {
     const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      throw new ApiError(400, "Email and new password are required");
+    }
 
     const result = await resetPasswordService(email, newPassword);
 

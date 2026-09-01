@@ -4,107 +4,24 @@ import bcrypt from "bcrypt";
 
 // Create User
 export const createUser = async (name, email, age) => {
-  const [existingUser] = await pool.query(
-    "SELECT * FROM users WHERE email = ?",
+  const existingUserResult = await pool.query(
+    "SELECT * FROM users WHERE email = $1",
     [email],
   );
 
-  if (existingUser.length > 0) {
+  if (existingUserResult.rows.length > 0) {
     throw new ApiError(409, "Email already exists");
   }
 
-  const [result] = await pool.query(
-    "INSERT INTO users (name, email, age) VALUES (?, ?, ?)",
+  const result = await pool.query(
+    `INSERT INTO users (name, email, age)
+     VALUES ($1, $2, $3)
+     RETURNING *`,
     [name, email, age],
   );
 
-  const [rows] = await pool.query("SELECT * FROM users WHERE id = ?", [
-    result.insertId,
-  ]);
-
-  return rows[0];
+  return result.rows[0];
 };
-
-// Get All Users
-// export const getAllUsers = async () => {
-//   const [rows] = await pool.query("SELECT * FROM users");
-//   return rows;
-// };
-
-// ------------------ Pagination ------------------------------------------------
-// export const getAllUsers = async (page, limit) => {
-//   const offset = (page - 1) * limit;
-
-//   const [[count]] = await pool.query("SELECT COUNT(*) AS total FROM users");
-
-//   const [rows] = await pool.query(
-//     `SELECT * FROM users
-//      LIMIT ?
-//      OFFSET ?`,
-//     [limit, offset],
-//   );
-
-//   return {
-//     users: rows,
-//     pagination: {
-//       totalUsers: count.total,
-//       currentPage: page,
-//       limit,
-//       totalPages: Math.ceil(count.total / limit),
-//     },
-//   };
-// };
-
-// ----------------------- Pagination + Search + Filter -----------------------------------
-// export const getAllUsers = async (page, limit, search, age) => {
-//   const offset = (page - 1) * limit;
-
-//   let whereClause = "WHERE 1=1";
-
-//   const values = [];
-
-//   // Search by name or email
-//   if (search) {
-//     whereClause += " AND (name LIKE ? OR email LIKE ?)";
-//     values.push(`%${search}%`, `%${search}%`);
-//   }
-
-//   // Filter by age
-//   if (age) {
-//     whereClause += " AND age = ?";
-//     values.push(age);
-//   }
-
-//   // Count query
-//   const [countRows] = await pool.query(
-//     `SELECT COUNT(*) AS total
-//      FROM users
-//      ${whereClause}`,
-//     values,
-//   );
-
-//   // Fetch data
-//   const [rows] = await pool.query(
-//     `
-//       SELECT *
-//       FROM users
-//       ${whereClause}
-//       LIMIT ?
-//       OFFSET ?
-//     `,
-//     [...values, limit, offset],
-//   );
-
-//   return {
-//     users: rows,
-//     pagination: {
-//       totalUsers: countRows[0].total,
-//       currentPage: page,
-//       limit,
-//       totalPages: Math.ceil(countRows[0].total / limit),
-//     },
-//   };
-// };
 
 // ----------------------- Pagination + Search + Filter + Sorting -----------------------------------
 export const getAllUsers = async (page, limit, search, age, sortBy, order) => {
@@ -113,141 +30,160 @@ export const getAllUsers = async (page, limit, search, age, sortBy, order) => {
   let whereClause = "WHERE 1=1";
   const values = [];
 
+  // Search by name or email
   if (search) {
-    whereClause += " AND (name LIKE ? OR email LIKE ?)";
+    whereClause += " AND (name ILIKE $1 OR email ILIKE $2)";
     values.push(`%${search}%`, `%${search}%`);
   }
 
+  // Filter by age
   if (age) {
-    whereClause += " AND age = ?";
+    const ageParam = values.length + 1;
+
+    whereClause += ` AND age = $${ageParam}`;
     values.push(age);
   }
 
+  // Allowed sorting fields
   const allowedSortFields = ["id", "name", "email", "age"];
   const allowedOrders = ["ASC", "DESC"];
 
   const finalSortBy = allowedSortFields.includes(sortBy) ? sortBy : "id";
 
-  const finalOrder = allowedOrders.includes(order) ? order : "ASC";
+  const finalOrder = allowedOrders.includes(order?.toUpperCase())
+    ? order.toUpperCase()
+    : "ASC";
 
-  const [[count]] = await pool.query(
+  // Count users
+  const countResult = await pool.query(
     `SELECT COUNT(*) AS total
      FROM users
      ${whereClause}`,
     values,
   );
 
-  const [rows] = await pool.query(
+  const totalUsers = Number(countResult.rows[0].total);
+
+  // Pagination parameters
+  const limitParam = values.length + 1;
+  const offsetParam = values.length + 2;
+
+  const result = await pool.query(
     `
     SELECT *
     FROM users
     ${whereClause}
     ORDER BY ${finalSortBy} ${finalOrder}
-    LIMIT ?
-    OFFSET ?
+    LIMIT $${limitParam}
+    OFFSET $${offsetParam}
     `,
     [...values, limit, offset],
   );
 
   return {
-    users: rows,
+    users: result.rows,
     pagination: {
-      totalUsers: count.total,
+      totalUsers,
       currentPage: page,
       limit,
-      totalPages: Math.ceil(count.total / limit),
+      totalPages: Math.ceil(totalUsers / limit),
     },
   };
 };
 
 // Get User By ID
 export const getUserByIdService = async (id) => {
-  const [rows] = await pool.query("SELECT * FROM users WHERE id = ?", [id]);
+  const result = await pool.query("SELECT * FROM users WHERE id = $1", [id]);
 
-  if (rows.length === 0) {
+  if (result.rows.length === 0) {
     throw new ApiError(404, "User not found");
   }
 
-  return rows[0];
+  return result.rows[0];
 };
 
 // Update User
 export const updateUserService = async (id, name, email, age) => {
-  const [result] = await pool.query(
-    "UPDATE users SET name = ?, email = ?, age = ? WHERE id = ?",
+  const result = await pool.query(
+    `UPDATE users
+     SET name = $1,
+         email = $2,
+         age = $3
+     WHERE id = $4
+     RETURNING *`,
     [name, email, age, id],
   );
 
-  if (result.affectedRows === 0) {
+  if (result.rowCount === 0) {
     throw new ApiError(404, "User not found");
   }
 
-  const [rows] = await pool.query("SELECT * FROM users WHERE id = ?", [id]);
-
-  return rows[0];
+  return result.rows[0];
 };
 
 // Delete User
 export const deleteUserService = async (id) => {
-  const [result] = await pool.query("DELETE FROM users WHERE id = ?", [id]);
+  const result = await pool.query("DELETE FROM users WHERE id = $1", [id]);
 
-  if (result.affectedRows === 0) {
+  if (result.rowCount === 0) {
     throw new ApiError(404, "User not found");
   }
 
   return;
 };
 
+// Save OTP
 export const saveOTP = async (email, otp) => {
-  const expiry = Date.now() + 5 * 60 * 1000;
-
-  const [result] = await pool.query(
+  const result = await pool.query(
     `
-      UPDATE users
-      SET otp = ?,
-          otp_expiry = ?
-      WHERE email = ?
+    UPDATE users
+    SET otp = $1,
+        otp_expiry = CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+    WHERE email = $2
     `,
-    [otp, expiry, email],
+    [otp, email],
   );
 
-  return result.affectedRows;
+  return result.rowCount;
 };
 
+// Verify OTP
 export const verifyOTPService = async (email, otp) => {
-  const [rows] = await pool.query(
+  const result = await pool.query(
     `
-      SELECT otp, otp_expiry
-      FROM users
-      WHERE email = ?
+    SELECT otp, otp_expiry
+    FROM users
+    WHERE email = $1
     `,
     [email],
   );
 
-  if (rows.length === 0) {
+  if (result.rows.length === 0) {
     throw new ApiError(404, "User not found");
   }
 
-  const user = rows[0];
+  const user = result.rows[0];
 
   if (user.otp !== otp) {
     throw new ApiError(400, "Invalid OTP");
   }
 
-  if (Date.now() > user.otp_expiry) {
+  // PostgreSQL returns TIMESTAMP as a JavaScript Date
+  if (new Date() > user.otp_expiry) {
     throw new ApiError(400, "OTP has expired");
   }
 
   return true;
 };
 
+// Reset Password
 export const resetPasswordService = async (email, newPassword) => {
   // Check if user exists
-  const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
+  const result = await pool.query("SELECT * FROM users WHERE email = $1", [
     email,
   ]);
 
-  if (rows.length === 0) {
+  if (result.rows.length === 0) {
     throw new ApiError(404, "User not found");
   }
 
@@ -258,10 +194,10 @@ export const resetPasswordService = async (email, newPassword) => {
   await pool.query(
     `
     UPDATE users
-    SET password = ?,
+    SET password = $1,
         otp = NULL,
         otp_expiry = NULL
-    WHERE email = ?
+    WHERE email = $2
     `,
     [hashedPassword, email],
   );
