@@ -4,16 +4,15 @@ import generateToken from "../utils/generateToken.js";
 import { sendEmail } from "../services/emailService.js";
 import { otpTemplate } from "../templates/otpTemplate.js";
 
-// ======================================================
-// Register
-// ======================================================
+// --------------- Register ------------------------------
+
 export const register = async (req, res, next) => {
   try {
-    const { name, email, age, password } = req.body;
+    const { name, email, phone, password } = req.body;
 
     // Check required fields
-    if (!name || !email || !password) {
-      const error = new Error("Name, email and password are required");
+    if (!name || !email || !phone || !password) {
+      const error = new Error("Name, email, phone and password are required");
       error.statusCode = 400;
       return next(error);
     }
@@ -30,15 +29,27 @@ export const register = async (req, res, next) => {
       return next(error);
     }
 
+    // Check if phone already exists
+    const existingPhoneResult = await pool.query(
+      "SELECT id FROM users WHERE phone = $1",
+      [phone],
+    );
+
+    if (existingPhoneResult.rows.length > 0) {
+      const error = new Error("Phone number already exists");
+      error.statusCode = 409;
+      return next(error);
+    }
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Save user
     const result = await pool.query(
-      `INSERT INTO users (name, email, age, password)
+      `INSERT INTO users (name, email, phone, password)
        VALUES ($1, $2, $3, $4)
        RETURNING id`,
-      [name, email, age || null, hashedPassword],
+      [name, email, phone, hashedPassword],
     );
 
     res.status(201).json({
@@ -51,9 +62,8 @@ export const register = async (req, res, next) => {
   }
 };
 
-// ======================================================
-// Login
-// ======================================================
+// --------------- Login ------------------------------
+
 export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -103,9 +113,8 @@ export const login = async (req, res, next) => {
   }
 };
 
-// ======================================================
-// Forgot Password
-// ======================================================
+// --------------- Forgot Password ------------------------------
+
 export const forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -155,9 +164,8 @@ export const forgotPassword = async (req, res, next) => {
   }
 };
 
-// ======================================================
-// Verify OTP
-// ======================================================
+// --------------- Verify OTP ------------------------------
+
 export const verifyOtp = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
@@ -207,9 +215,8 @@ export const verifyOtp = async (req, res, next) => {
   }
 };
 
-// ======================================================
-// Reset Password
-// ======================================================
+// --------------- Reset Password ------------------------------
+
 export const resetPassword = async (req, res, next) => {
   try {
     const { email, password } = req.body;
