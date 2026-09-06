@@ -3,6 +3,7 @@ import cors from "cors";
 
 import userRoutes from "./routes/userRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import allotmentRoutes from "./routes/allotmentRoutes.js";
 import errorHandler from "./middlewares/errorMiddleware.js";
 
 const app = express();
@@ -31,6 +32,7 @@ app.get("/", (req, res) => {
 // Routes
 app.use("/users", userRoutes);
 app.use("/auth", authRoutes);
+app.use("/allotments", allotmentRoutes);
 
 // Error handler
 app.use(errorHandler);
