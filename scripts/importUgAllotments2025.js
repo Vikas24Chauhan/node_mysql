@@ -3,7 +3,6 @@ import path from "path";
 import csv from "csv-parser";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
-
 import pool from "../config/db.js";
 
 dotenv.config();
@@ -11,7 +10,7 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const csvFilePath = path.join(__dirname, "../data/pg_allotments_2025.csv");
+const csvFilePath = path.join(__dirname, "../data/ug_allotments_2025.csv");
 
 const BATCH_SIZE = 1000;
 
@@ -21,11 +20,6 @@ const cleanHeader = (header) => {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "_");
-
-  // Normalize BOND YRS → bond_years
-  if (cleaned === "bond_yrs") {
-    return "bond_years";
-  }
 
   return cleaned;
 };
@@ -83,7 +77,7 @@ const insertBatch = async (rows, client) => {
   const placeholders = [];
 
   rows.forEach((row, index) => {
-    const base = index * 11;
+    const base = index * 12;
 
     placeholders.push(`
       (
@@ -97,48 +91,29 @@ const insertBatch = async (rows, client) => {
         $${base + 8},
         $${base + 9},
         $${base + 10},
-        $${base + 11}
+        $${base + 11},
+        $${base + 12}
       )
     `);
 
     values.push(
-      // 1 - ROUND
       cleanInteger(row.round),
-
-      // 2 - AI RANK
       cleanInteger(row.ai_rank),
-
-      // 3 - STATE
       cleanText(row.state),
-
-      // 4 - INSTITUTE
       cleanText(row.institute),
-
-      // 5 - COURSE
       cleanText(row.course),
-
-      // 6 - QUOTA
       cleanText(row.quota),
-
-      // 7 - CATEGORY
       cleanText(row.category),
-
-      // 8 - FEE
       cleanCurrency(row.fee),
-
-      // 9 - STIPEND
-      cleanCurrency(row.stipend),
-
-      // 10 - BOND YEARS
-      cleanInteger(row.bond_years),
-
-      // 11 - BEDS
       cleanInteger(row.beds),
+      cleanInteger(row.bond_years),
+      cleanCurrency(row.bond_penalty),
+      cleanCurrency(row.stipend),
     );
   });
 
   const query = `
-    INSERT INTO neet_pg_allotments_2025 (
+    INSERT INTO ug_allotments_2025 (
       round,
       ai_rank,
       state,
@@ -147,9 +122,10 @@ const insertBatch = async (rows, client) => {
       quota,
       category,
       fee,
-      stipend,
+      beds,
       bond_years,
-      beds
+      bond_penalty,
+      stipend
     )
     VALUES ${placeholders.join(",")}
   `;
@@ -157,10 +133,10 @@ const insertBatch = async (rows, client) => {
   await client.query(query, values);
 };
 
-const importPgAllotments2025 = async () => {
+const importUgAllotments2025 = async () => {
   console.log("");
   console.log("==========================================");
-  console.log("     NEET PG 2025 ALLOTMENTS IMPORT");
+  console.log("      UG 2025 ALLOTMENTS IMPORT");
   console.log("==========================================");
   console.log("");
 
@@ -191,7 +167,15 @@ const importPgAllotments2025 = async () => {
 
     const stream = fs.createReadStream(csvFilePath).pipe(
       csv({
-        mapHeaders: ({ header }) => cleanHeader(header),
+        mapHeaders: ({ header }) => {
+          const cleaned = cleanHeader(header);
+
+          if (cleaned === "stipend_year_1") {
+            return "stipend";
+          }
+
+          return cleaned;
+        },
       }),
     );
 
@@ -210,7 +194,6 @@ const importPgAllotments2025 = async () => {
       }
     }
 
-    // Insert remaining rows
     if (batch.length > 0) {
       await insertBatch(batch, client);
 
@@ -228,11 +211,10 @@ const importPgAllotments2025 = async () => {
     console.log("");
 
     console.log(`CSV records found : ${totalRows.toLocaleString()}`);
-
     console.log(`Records inserted  : ${insertedRows.toLocaleString()}`);
 
     console.log("");
-    console.log("✅ NEET PG 2025 data successfully imported.");
+    console.log("✅ UG 2025 data successfully imported.");
     console.log("");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -256,4 +238,4 @@ const importPgAllotments2025 = async () => {
   }
 };
 
-importPgAllotments2025();
+importUgAllotments2025();
