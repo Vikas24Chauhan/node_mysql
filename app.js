@@ -14,6 +14,7 @@ app.use(express.json());
 const allowedOrigins = [
   "http://localhost:5173",
   "https://frontend-eight-psi-62.vercel.app",
+  "https://believersconsultancy.com",
 ];
 
 app.use(
