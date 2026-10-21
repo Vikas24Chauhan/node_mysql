@@ -1,6 +1,24 @@
 import pool from "../config/db.js";
 
-// =============== NEET PG Seat Matrix 2025 =================================
+const RANK_COLUMNS_2025 = ["cr_2025_1", "cr_2025_2", "cr_2025_3", "cr_2025_4"];
+const RANK_COLUMNS_2024 = [
+  "cr_2024_1",
+  "cr_2024_2",
+  "cr_2024_3",
+  "cr_2024_4",
+  "cr_2024_5",
+];
+
+// Column names come from this whitelist only, never from user input.
+const RANK_COLUMNS = {
+  2025: RANK_COLUMNS_2025,
+  2024: RANK_COLUMNS_2024,
+  both: [...RANK_COLUMNS_2025, ...RANK_COLUMNS_2024],
+};
+
+// GREATEST / LEAST ignore NULLs in Postgres; NULLIF treats 0 as "no rank".
+const rankExpression = (fn, columns) =>
+  `${fn}(${columns.map((col) => `NULLIF(${col}, 0)`).join(", ")})`;
 
 export const getPgSeatMatrix2025 = async (req, res) => {
   try {
@@ -15,6 +33,10 @@ export const getPgSeatMatrix2025 = async (req, res) => {
       branch,
       institute,
       search,
+      minSeats,
+      rankFrom,
+      rankTo,
+      rankView = "2025",
     } = req.query;
 
     const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
@@ -64,6 +86,36 @@ export const getPgSeatMatrix2025 = async (req, res) => {
       conditions.push(`institute ILIKE $${values.length}`);
     }
 
+    const minSeatsNumber = parseInt(minSeats, 10);
+
+    if (!Number.isNaN(minSeatsNumber)) {
+      values.push(minSeatsNumber);
+      conditions.push(`seats >= $${values.length}`);
+    }
+
+    // Rank range is checked against the closing ranks of the selected view
+    // (2025 / 2024 / both): the row's highest rank must be >= rankFrom and
+    // its lowest rank must be <= rankTo. Rows with no rank are excluded.
+    const rankColumns = RANK_COLUMNS[rankView] || RANK_COLUMNS["2025"];
+
+    const rankFromNumber = parseFloat(rankFrom);
+
+    if (!Number.isNaN(rankFromNumber)) {
+      values.push(rankFromNumber);
+      conditions.push(
+        `${rankExpression("GREATEST", rankColumns)} >= $${values.length}`,
+      );
+    }
+
+    const rankToNumber = parseFloat(rankTo);
+
+    if (!Number.isNaN(rankToNumber)) {
+      values.push(rankToNumber);
+      conditions.push(
+        `${rankExpression("LEAST", rankColumns)} <= $${values.length}`,
+      );
+    }
+
     if (search) {
       values.push(`%${search}%`);
 
@@ -84,7 +136,9 @@ export const getPgSeatMatrix2025 = async (req, res) => {
 
     // Total records
     const countQuery = `
-      SELECT COUNT(*) AS total
+      SELECT
+        COUNT(*) AS total,
+        COALESCE(SUM(seats), 0) AS total_seats
       FROM neet_pg_seat_matrix_2025
       ${whereClause}
     `;
@@ -92,6 +146,7 @@ export const getPgSeatMatrix2025 = async (req, res) => {
     const countResult = await pool.query(countQuery, values);
 
     const total = parseInt(countResult.rows[0].total, 10);
+    const totalSeats = parseInt(countResult.rows[0].total_seats, 10) || 0;
 
     // Data
     const dataValues = [...values];
@@ -140,6 +195,8 @@ export const getPgSeatMatrix2025 = async (req, res) => {
     res.status(200).json({
       success: true,
       data: dataResult.rows,
+
+      totalSeats,
 
       pagination: {
         page: pageNumber,
