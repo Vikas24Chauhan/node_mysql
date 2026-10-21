@@ -183,7 +183,7 @@ export const getPgSeatMatrix2025 = async (req, res) => {
         cr_2025_4
       FROM neet_pg_seat_matrix_2025
       ${whereClause}
-      ORDER BY state ASC, institute ASC, course ASC, id ASC
+      ORDER BY round ASC, id ASC
       LIMIT $${limitPosition}
       OFFSET $${offsetPosition}
     `;
