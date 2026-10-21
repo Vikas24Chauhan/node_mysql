@@ -13,6 +13,11 @@ export const getPgFeeStipendBond2025 = async (req, res) => {
       institute,
       search,
       bond,
+      bondYears,
+      minFee,
+      maxFee,
+      minBeds,
+      maxBeds,
     } = req.query;
 
     const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
@@ -50,6 +55,49 @@ export const getPgFeeStipendBond2025 = async (req, res) => {
       conditions.push(`bond_years > 0`);
     } else if (bond === "no") {
       conditions.push(`bond_years = 0`);
+    }
+
+    // bondYears=2    -> exact bond length (0 = no bond)
+    // bondYears=na   -> bond info not available (NULL)
+    if (bondYears) {
+      if (String(bondYears).toLowerCase() === "na") {
+        conditions.push(`bond_years IS NULL`);
+      } else {
+        const bondYearsNumber = parseInt(bondYears, 10);
+
+        if (!Number.isNaN(bondYearsNumber)) {
+          values.push(bondYearsNumber);
+          conditions.push(`bond_years = $${values.length}`);
+        }
+      }
+    }
+
+    const minFeeNumber = parseFloat(minFee);
+
+    if (!Number.isNaN(minFeeNumber)) {
+      values.push(minFeeNumber);
+      conditions.push(`fee >= $${values.length}`);
+    }
+
+    const maxFeeNumber = parseFloat(maxFee);
+
+    if (!Number.isNaN(maxFeeNumber)) {
+      values.push(maxFeeNumber);
+      conditions.push(`fee <= $${values.length}`);
+    }
+
+    const minBedsNumber = parseInt(minBeds, 10);
+
+    if (!Number.isNaN(minBedsNumber)) {
+      values.push(minBedsNumber);
+      conditions.push(`beds >= $${values.length}`);
+    }
+
+    const maxBedsNumber = parseInt(maxBeds, 10);
+
+    if (!Number.isNaN(maxBedsNumber)) {
+      values.push(maxBedsNumber);
+      conditions.push(`beds <= $${values.length}`);
     }
 
     if (search) {
@@ -138,7 +186,13 @@ export const getPgFeeStipendBond2025 = async (req, res) => {
 
 export const getPgFeeStipendBondFilters2025 = async (req, res) => {
   try {
-    const [statesResult, quotasResult, coursesResult] = await Promise.all([
+    const [
+      statesResult,
+      quotasResult,
+      coursesResult,
+      bondYearsResult,
+      unknownBondResult,
+    ] = await Promise.all([
       pool.query(`
         SELECT DISTINCT state
         FROM neet_pg_fee_stipend_bond_2025
@@ -159,6 +213,21 @@ export const getPgFeeStipendBondFilters2025 = async (req, res) => {
         WHERE course IS NOT NULL AND course <> ''
         ORDER BY course ASC
       `),
+
+      pool.query(`
+        SELECT DISTINCT bond_years
+        FROM neet_pg_fee_stipend_bond_2025
+        WHERE bond_years IS NOT NULL
+        ORDER BY bond_years ASC
+      `),
+
+      pool.query(`
+        SELECT EXISTS (
+          SELECT 1
+          FROM neet_pg_fee_stipend_bond_2025
+          WHERE bond_years IS NULL
+        ) AS has_unknown
+      `),
     ]);
 
     res.status(200).json({
@@ -168,10 +237,15 @@ export const getPgFeeStipendBondFilters2025 = async (req, res) => {
         states: statesResult.rows.map((row) => row.state),
         quotas: quotasResult.rows.map((row) => row.quota),
         courses: coursesResult.rows.map((row) => row.course),
+        bondYears: bondYearsResult.rows.map((row) => row.bond_years),
+        hasUnknownBond: unknownBondResult.rows[0].has_unknown,
       },
     });
   } catch (error) {
-    console.error("Error fetching PG 2025 fee / stipend / bond filters:", error);
+    console.error(
+      "Error fetching PG 2025 fee / stipend / bond filters:",
+      error,
+    );
 
     res.status(500).json({
       success: false,
