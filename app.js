@@ -4,6 +4,7 @@ import cors from "cors";
 import userRoutes from "./routes/userRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import allotmentRoutes from "./routes/allotmentRoutes.js";
+import closingRankRoutes from "./routes/closingRankRoutes.js";
 import seatMatrixRoutes from "./routes/seatMatrixRoutes.js";
 import predictorRoutes from "./routes/predictorRoutes.js";
 import errorHandler from "./middlewares/errorMiddleware.js";
@@ -36,6 +37,7 @@ app.get("/", (req, res) => {
 app.use("/users", userRoutes);
 app.use("/auth", authRoutes);
 app.use("/allotments", allotmentRoutes);
+app.use("/closing-ranks", closingRankRoutes);
 app.use("/seat-matrix", seatMatrixRoutes);
 app.use("/predictor", predictorRoutes);
 
