@@ -1,262 +1,343 @@
 import pool from "../config/db.js";
 import bcrypt from "bcrypt";
+import { randomInt } from "node:crypto";
 import generateToken from "../utils/generateToken.js";
 import { sendEmail } from "../services/emailService.js";
 import { otpTemplate } from "../templates/otpTemplate.js";
+
+// Normalize email consistently across all authentication endpoints.
+const normalizeEmail = (email) => email.trim().toLowerCase();
 
 // --------------- Register ------------------------------
 
 export const register = async (req, res, next) => {
   try {
-    const { name, email, phone, password } = req.body;
+    const { name, email, phone, password } = req.body ?? {};
 
-    // Check required fields
-    if (!name || !email || !phone || !password) {
-      const error = new Error("Name, email, phone and password are required");
-      error.statusCode = 400;
-      return next(error);
+    if (
+      typeof name !== "string" ||
+      typeof email !== "string" ||
+      typeof phone !== "string" ||
+      typeof password !== "string" ||
+      !name.trim() ||
+      !email.trim() ||
+      !phone.trim() ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, email, phone and password are required.",
+      });
     }
 
-    // Check if email already exists
-    const existingUserResult = await pool.query(
-      "SELECT id FROM users WHERE email = $1",
-      [email],
-    );
+    const cleanName = name.trim();
+    const cleanEmail = normalizeEmail(email);
+    const cleanPhone = phone.trim();
 
-    if (existingUserResult.rows.length > 0) {
-      const error = new Error("Email already exists");
-      error.statusCode = 409;
-      return next(error);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address.",
+      });
     }
 
-    // Check if phone already exists
-    const existingPhoneResult = await pool.query(
-      "SELECT id FROM users WHERE phone = $1",
-      [phone],
-    );
-
-    if (existingPhoneResult.rows.length > 0) {
-      const error = new Error("Phone number already exists");
-      error.statusCode = 409;
-      return next(error);
+    // bcrypt supports passwords up to 72 bytes.
+    if (Buffer.byteLength(password, "utf8") > 72) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must not exceed 72 bytes.",
+      });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Save user
     const result = await pool.query(
       `INSERT INTO users (name, email, phone, password)
        VALUES ($1, $2, $3, $4)
        RETURNING id`,
-      [name, email, phone, hashedPassword],
+      [cleanName, cleanEmail, cleanPhone, hashedPassword],
     );
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "User registered successfully",
       userId: result.rows[0].id,
     });
   } catch (error) {
-    next(error);
+    console.error("Registration failed:", {
+      code: error.code,
+      constraint: error.constraint,
+      table: error.table,
+      column: error.column,
+      message: error.message,
+    });
+
+    if (error.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        message: "An account with these details already exists.",
+      });
+    }
+
+    if (error.code === "23502" || error.code === "23503") {
+      return res.status(400).json({
+        success: false,
+        message: "Registration details could not be saved.",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Registration failed. Please try again.",
+    });
   }
 };
 
-// --------------- Login ------------------------------
+// --------------------------------------------------
+// Login
+// --------------------------------------------------
 
 export const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body ?? {};
 
-    if (!email || !password) {
-      const error = new Error("Email and password are required");
-      error.statusCode = 400;
-      return next(error);
+    if (
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !email.trim() ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required.",
+      });
     }
 
-    // Find user
-    const result = await pool.query("SELECT * FROM users WHERE email = $1", [
-      email,
-    ]);
+    const cleanEmail = normalizeEmail(email);
+
+    const result = await pool.query(
+      `SELECT *
+       FROM users
+       WHERE LOWER(TRIM(email)) = $1
+       LIMIT 1`,
+      [cleanEmail],
+    );
 
     if (result.rows.length === 0) {
-      const error = new Error("Invalid email or password");
-      error.statusCode = 401;
-      return next(error);
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password.",
+      });
     }
 
     const user = result.rows[0];
 
-    // Compare password
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      const error = new Error("Invalid email or password");
-      error.statusCode = 401;
-      return next(error);
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password.",
+      });
     }
 
-    // Generate Token
     const token = generateToken(user);
 
-    // Remove password before sending user data
+    // Never return the password hash to the client.
     delete user.password;
+    delete user.otp;
+    delete user.otp_expiry;
+    delete user.reset_token_hash;
+    delete user.reset_token_expiry;
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Login successful",
       token,
       user,
     });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
 
-// --------------- Forgot Password ------------------------------
+// --------------------------------------------------
+// Forgot Password
+// --------------------------------------------------
 
 export const forgotPassword = async (req, res, next) => {
   try {
-    const { email } = req.body;
+    const { email } = req.body ?? {};
 
-    if (!email) {
-      const error = new Error("Email is required");
-      error.statusCode = 400;
-      return next(error);
+    if (typeof email !== "string" || !email.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required.",
+      });
     }
 
-    // Check user exists
+    const cleanEmail = normalizeEmail(email);
+
     const userResult = await pool.query(
-      "SELECT id FROM users WHERE email = $1",
-      [email],
+      `SELECT id
+       FROM users
+       WHERE LOWER(TRIM(email)) = $1
+       LIMIT 1`,
+      [cleanEmail],
     );
 
     if (userResult.rows.length === 0) {
-      const error = new Error("User not found");
-      error.statusCode = 404;
-      return next(error);
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
     }
 
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // OTP expires after 10 minutes
+    const otp = randomInt(100000, 1000000).toString();
     const expiry = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Save OTP
     await pool.query(
       `UPDATE users
        SET otp = $1,
            otp_expiry = $2
-       WHERE email = $3`,
-      [otp, expiry, email],
+       WHERE id = $3`,
+      [otp, expiry, userResult.rows[0].id],
     );
 
-    // Send Email
-    await sendEmail(email, "Password Reset OTP", otpTemplate(otp));
+    await sendEmail(cleanEmail, "Password Reset OTP", otpTemplate(otp));
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "OTP sent successfully",
+      message: "OTP sent successfully.",
     });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
 
-// --------------- Verify OTP ------------------------------
+// --------------------------------------------------
+// Verify OTP
+// --------------------------------------------------
 
 export const verifyOtp = async (req, res, next) => {
   try {
-    const { email, otp } = req.body;
+    const { email, otp } = req.body ?? {};
 
-    if (!email || !otp) {
-      const error = new Error("Email and OTP are required");
-      error.statusCode = 400;
-      return next(error);
+    if (
+      typeof email !== "string" ||
+      !email.trim() ||
+      (typeof otp !== "string" && typeof otp !== "number") ||
+      !/^\d{6}$/.test(String(otp))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid email and six-digit OTP are required.",
+      });
     }
 
-    // Find user
+    const cleanEmail = normalizeEmail(email);
+
     const result = await pool.query(
       `SELECT otp, otp_expiry
        FROM users
-       WHERE email = $1`,
-      [email],
+       WHERE LOWER(TRIM(email)) = $1
+       LIMIT 1`,
+      [cleanEmail],
     );
 
     if (result.rows.length === 0) {
-      const error = new Error("User not found");
-      error.statusCode = 404;
-      return next(error);
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
     }
 
     const user = result.rows[0];
 
-    // Check OTP
-    if (user.otp !== otp) {
-      const error = new Error("Invalid OTP");
-      error.statusCode = 400;
-      return next(error);
+    if (!user.otp || String(user.otp) !== String(otp)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP.",
+      });
     }
 
-    // Check expiry
     if (!user.otp_expiry || new Date() > new Date(user.otp_expiry)) {
-      const error = new Error("OTP has expired");
-      error.statusCode = 400;
-      return next(error);
+      return res.status(400).json({
+        success: false,
+        message: "OTP has expired.",
+      });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "OTP verified successfully",
+      message: "OTP verified successfully.",
     });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
 
-// --------------- Reset Password ------------------------------
+// --------------------------------------------------
+// Reset Password
+// --------------------------------------------------
 
 export const resetPassword = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body ?? {};
 
-    if (!email || !password) {
-      const error = new Error("Email and password are required");
-      error.statusCode = 400;
-      return next(error);
+    if (
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required.",
+      });
     }
 
-    // Check user exists
+    if (Buffer.byteLength(password, "utf8") > 72) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must not exceed 72 bytes.",
+      });
+    }
+
+    const cleanEmail = normalizeEmail(email);
+
     const userResult = await pool.query(
-      "SELECT id FROM users WHERE email = $1",
-      [email],
+      `SELECT id
+       FROM users
+       WHERE LOWER(TRIM(email)) = $1
+       LIMIT 1`,
+      [cleanEmail],
     );
 
     if (userResult.rows.length === 0) {
-      const error = new Error("User not found");
-      error.statusCode = 404;
-      return next(error);
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
     }
 
-    // Hash new password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Update password and clear OTP
     await pool.query(
       `UPDATE users
        SET password = $1,
            otp = NULL,
-           otp_expiry = NULL
-       WHERE email = $2`,
-      [hashedPassword, email],
+           otp_expiry = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [hashedPassword, userResult.rows[0].id],
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "Password reset successfully",
+      message: "Password reset successfully.",
     });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };

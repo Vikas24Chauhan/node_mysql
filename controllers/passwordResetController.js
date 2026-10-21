@@ -6,22 +6,27 @@ import {
   resetPasswordWithToken,
 } from "../services/passwordResetService.js";
 
-// Verify email + phone
+// Verify recovery details
 export const verifyRecovery = async (req, res, next) => {
   try {
-    const { email, phone } = req.body;
+    const { email, phone } = req.body ?? {};
 
-    if (!email || !phone) {
+    if (
+      typeof email !== "string" ||
+      typeof phone !== "string" ||
+      !email.trim() ||
+      !phone.trim()
+    ) {
       throw new ApiError(400, "Email and phone number are required");
     }
 
-    const resetToken = await verifyRecoveryDetails(email, phone);
+    const resetToken = await verifyRecoveryDetails(
+      email.trim().toLowerCase(),
+      phone.trim(),
+    );
 
     if (!resetToken) {
-      throw new ApiError(
-        400,
-        "The email and phone number could not be verified",
-      );
+      throw new ApiError(400, "Unable to verify recovery details");
     }
 
     return res.status(200).json(
@@ -34,17 +39,28 @@ export const verifyRecovery = async (req, res, next) => {
   }
 };
 
-// Save new password
+// Reset password using a valid recovery token
 export const resetPassword = async (req, res, next) => {
   try {
-    const { resetToken, newPassword, confirmPassword } = req.body;
+    const { resetToken, newPassword, confirmPassword } = req.body ?? {};
 
-    if (!resetToken || !newPassword || !confirmPassword) {
+    if (
+      typeof resetToken !== "string" ||
+      !resetToken.trim() ||
+      typeof newPassword !== "string" ||
+      typeof confirmPassword !== "string" ||
+      !newPassword ||
+      !confirmPassword
+    ) {
       throw new ApiError(400, "All fields are required");
     }
 
     if (newPassword.length < 8) {
       throw new ApiError(400, "Password must contain at least 8 characters");
+    }
+
+    if (Buffer.byteLength(newPassword, "utf8") > 72) {
+      throw new ApiError(400, "Password is too long");
     }
 
     if (newPassword !== confirmPassword) {
