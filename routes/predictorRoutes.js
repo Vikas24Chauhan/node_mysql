@@ -1,5 +1,5 @@
 import express from "express";
-import { predictNeetPg2025 } from "../controllers/predictorController.js";
+import { predictNeetPg2025 } from "../controllers/neetPgPredictorController.js";
 
 const router = express.Router();
 
