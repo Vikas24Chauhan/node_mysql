@@ -12,6 +12,7 @@ export const getPgAllotments2025 = async (req, res) => {
       quota,
       state,
       course,
+      branch,
       institute,
       rankFrom,
       rankTo,
@@ -51,6 +52,11 @@ export const getPgAllotments2025 = async (req, res) => {
       conditions.push(`course = $${values.length}`);
     }
 
+    if (branch) {
+      values.push(branch);
+      conditions.push(`branch = $${values.length}`);
+    }
+
     if (institute) {
       values.push(`%${institute}%`);
       conditions.push(`institute ILIKE $${values.length}`);
@@ -73,6 +79,7 @@ export const getPgAllotments2025 = async (req, res) => {
         (
           institute ILIKE $${values.length}
           OR course ILIKE $${values.length}
+          OR branch ILIKE $${values.length}
           OR state ILIKE $${values.length}
           OR category ILIKE $${values.length}
           OR quota ILIKE $${values.length}
@@ -111,15 +118,16 @@ export const getPgAllotments2025 = async (req, res) => {
         state,
         institute,
         course,
+        branch,
         quota,
         category,
         fee,
-        stipend,
+        stipend_year_1,
         bond_years,
         beds
       FROM neet_pg_allotments_2025
       ${whereClause}
-      ORDER BY ai_rank ASC
+      ORDER BY ai_rank ASC NULLS LAST, id ASC
       LIMIT $${limitPosition}
       OFFSET $${offsetPosition}
     `;
@@ -161,6 +169,7 @@ export const getPgAllotmentFilters2025 = async (req, res) => {
       quotasResult,
       categoriesResult,
       coursesResult,
+      branchesResult,
     ] = await Promise.all([
       pool.query(`
         SELECT DISTINCT round
@@ -196,6 +205,13 @@ export const getPgAllotmentFilters2025 = async (req, res) => {
         WHERE course IS NOT NULL AND course <> ''
         ORDER BY course ASC
       `),
+
+      pool.query(`
+        SELECT DISTINCT branch
+        FROM neet_pg_allotments_2025
+        WHERE branch IS NOT NULL AND branch <> ''
+        ORDER BY branch ASC
+      `),
     ]);
 
     res.status(200).json({
@@ -207,6 +223,7 @@ export const getPgAllotmentFilters2025 = async (req, res) => {
         quotas: quotasResult.rows.map((row) => row.quota),
         categories: categoriesResult.rows.map((row) => row.category),
         courses: coursesResult.rows.map((row) => row.course),
+        branches: branchesResult.rows.map((row) => row.branch),
       },
     });
   } catch (error) {
